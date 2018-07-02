@@ -1,8 +1,10 @@
 .SUFFIXES: .c .o .lo
 
 COMPILE = $(CC) -Wall -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -g -O3
-INC_PATH = -I/usr/local/include
-LIB_PATH = -lm -lpthread -lfastcommon
+#INC_PATH = -I/usr/local/include
+INC_PATH = -I/usr/local/include -I../depend
+#LIB_PATH = -lm -lpthread -lfastcommon
+LIB_PATH = -lpthread
 
 SHMCACHE_SHARED_OBJS = shmcache.lo shmopt.lo shm_striping_allocator.lo shm_object_pool.lo \
 					   shm_hashtable.lo shm_value_allocator.lo shm_op_wrapper.lo shm_lock.lo

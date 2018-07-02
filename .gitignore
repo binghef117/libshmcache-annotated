@@ -1,0 +1,13 @@
+
+#compile temporary files
+*.o
+*.lo
+*.a
+*.so
+
+
+#GLOBAL temporary files
+GTAGS
+GRTAGS
+GPATH
+

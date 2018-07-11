@@ -63,6 +63,7 @@ int main(int argc, char *argv[])
         entries[i].value.expires = current_time + ttl;
     }
 
+    // shuffle
     for (i=0; i<KEY_COUNT; i++) {
         i1 = (KEY_COUNT * (int64_t)rand()) / (int64_t)RAND_MAX;
         i2 = KEY_COUNT - 1 - i1;

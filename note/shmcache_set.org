@@ -1,0 +1,23 @@
+
+* shmcache_set
+
+- ~shmcache_set_ex~
+
+- ~shmcache_ht_set~
+
+- ~shm_value_allocator_alloc~
+内存分配
+
+- ~shmopt_init_value_segment~
+这里有 proj_id 
+proj是什么单词的缩写
+proj是ftok函数的第二个参数
+
+
+- ~shmopt_init_segment~
+
+
+
+
+
+

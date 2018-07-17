@@ -89,6 +89,7 @@ return none
 */
 static inline void shm_list_delete(struct shmcache_context *context, int64_t obj_offset)
 {
+    // 链表中的删除操作
     struct shm_list *node;
 
     node = shm_list_ptr(context, obj_offset);

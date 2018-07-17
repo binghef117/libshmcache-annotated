@@ -118,9 +118,8 @@ int shmopt_open_value_segments(struct shmcache_context *context)
     int segment_index;
 
     for (segment_index = context->segments.values.count;
-            segment_index < context->memory->vm_info.segment.count.current;
-            segment_index++)
-    {
+         segment_index < context->memory->vm_info.segment.count.current;
+         segment_index++) {
         if ((result=shmopt_init_value_segment(context, segment_index)) != 0) {
             return result;
         }

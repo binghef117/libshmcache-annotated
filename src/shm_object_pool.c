@@ -97,6 +97,7 @@ int64_t shm_object_pool_remove(struct shmcache_object_pool_context *op)
         return -1;
     }
 
+    // 这段操作目的在于当前index对应的object pool从queue中删掉
     index = op->index;
     current = index;
     while (current != op->obj_pool_info->queue.head) {
@@ -105,13 +106,15 @@ int64_t shm_object_pool_remove(struct shmcache_object_pool_context *op)
         current = previous;
     }
 
+    // 这个取余操作是什么意图
     op->obj_pool_info->queue.head = (op->obj_pool_info->queue.head + 1) %
         op->obj_pool_info->queue.capacity;
+    
     return op->offsets[index];
 }
 
 int64_t shm_object_pool_remove_by(struct shmcache_object_pool_context *op,
-        const int64_t obj_offset)
+                                  const int64_t obj_offset)
 {
     int64_t current_offset;
 

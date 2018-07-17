@@ -77,8 +77,8 @@ int main(int argc, char *argv[])
     for (k=0; k<5; k++) {
         for (i=0; i<KEY_COUNT; i++) {
             result = shmcache_set_ex(&context,
-                            &entries[i].key,
-                            &entries[i].value);
+                                     &entries[i].key,
+                                     &entries[i].value);
             if (result != 0) {
                 printf("%d. set fail, errno: %d\n", i + 1, result);
                 break;

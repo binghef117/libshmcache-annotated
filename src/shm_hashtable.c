@@ -27,15 +27,20 @@ void shm_ht_init(struct shmcache_context *context, const int capacity)
     context->memory->hashtable.count = 0;
 }
 
-#define HT_GET_BUCKET_INDEX(context, key) \
+
+// ?? hashtable capacity 是如何确定下来的？通过配置文件？
+#define HT_GET_BUCKET_INDEX(context, key)                              \
     ((unsigned int)context->config.hash_func(key->data, key->length) % \
      context->memory->hashtable.capacity)
+
 
 #define HT_KEY_EQUALS(hentry, pkey) (hentry->key_len == pkey->length && \
         memcmp(hentry->key, pkey->data, pkey->length) == 0)
 
+
 #define HT_VALUE_EQUALS(hvalue, hv_len, pvalue) (hv_len == pvalue->length \
         && memcmp(hvalue, pvalue->data, pvalue->length) == 0)
+
 
 int shm_ht_set(struct shmcache_context *context,
         const struct shmcache_key_info *key,
@@ -66,9 +71,10 @@ int shm_ht_set(struct shmcache_context *context,
     }
 
     if (context->memory->hashtable.count >= context->config.max_key_count) {
-        if ((result=shm_value_allocator_recycle(context, &context->memory->
-                        stats.memory.recycle.key, context->
-                        config.recycle_key_once)) != 0)
+        if ((result=shm_value_allocator_recycle(
+                 context,
+                 &context->memory->stats.memory.recycle.key,
+                 context->config.recycle_key_once)) != 0)
         {
             return result;
         }
@@ -79,7 +85,8 @@ int shm_ht_set(struct shmcache_context *context,
     }
 
     if ((new_entry=shm_value_allocator_alloc(context,
-                    key->length, value->length)) == NULL)
+                                             key->length,
+                                             value->length)) == NULL)
     {
        return result;
     }
@@ -89,7 +96,11 @@ int shm_ht_set(struct shmcache_context *context,
     found = false;
     index = HT_GET_BUCKET_INDEX(context, key);
     old_offset = context->memory->hashtable.buckets[index];
+    
+    // ?? 以下逻辑是为了处理hash计算中出现了相同的key值
+    // 这样就意味着两个不同key的对应一个hash_key
     while (old_offset > 0) {
+        // 尝试使用offset从hash_table中查找已有entry
         old_entry = shm_get_hentry_ptr(context, old_offset);
         if (HT_KEY_EQUALS(old_entry, key)) {
             found = true;
@@ -99,7 +110,9 @@ int shm_ht_set(struct shmcache_context *context,
         old_offset = old_entry->ht_next;
         previous = old_entry;
     }
-
+    
+    // 找到了原始key对应的hash_map，目的在于使用new_entry替换old_entry
+    // 再将old_entry的内存释放掉
     if (found) {
         bool recycled = false;
         new_entry->ht_next = old_entry->ht_next;

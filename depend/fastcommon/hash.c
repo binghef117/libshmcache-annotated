@@ -1287,7 +1287,7 @@ int calc_hashnr1_ex(const void* key, const int key_len, \
     h = 31 * h + *p; \
   } \
  \
-  return h; \
+  return h;
 
 int simple_hash(const void* key, const int key_len)
 {

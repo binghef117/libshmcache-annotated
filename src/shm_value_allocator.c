@@ -43,19 +43,24 @@ static struct shm_hash_entry *shm_value_allocator_do_alloc(struct shmcache_conte
     struct shm_striping_allocator *allocator;
     struct shm_hash_entry *entry;
 
+    // 在object pool中循环找到一块可用的内存
     allocator_offset = shm_object_pool_first(&context->value_allocator.doing);
     while (allocator_offset > 0) {
         allocator = (struct shm_striping_allocator *)(context->segments.
                 hashtable.base + allocator_offset);
+        // 在这个allocator中找到了可用的条目
         if ((entry=shm_value_striping_alloc(context, allocator, size)) != NULL) {
             context->memory->usage.used.entry += size;
             return entry;
         }
 
-        if ((shm_striping_allocator_free_size(allocator) <= context->config.
-                va_policy.discard_memory_size) || (allocator->fail_times >
-                context->config.va_policy.max_fail_times))
+        // allocator的可用内存不足 或 失败次数过多，则将这个object pool从doing转到done
+        // ?? 什么时候allocator的失败次数会过多呢 ?
+        if ((shm_striping_allocator_free_size(allocator)
+             <= context->config.va_policy.discard_memory_size)
+            || (allocator->fail_times > context->config.va_policy.max_fail_times))
         {
+            // ?? 通过 context 中 index 如何保证即将 remove 的 就一定是当前循环的 allocator offset 呢？
             removed_offset = shm_object_pool_remove(&context->value_allocator.doing);
             if (removed_offset == allocator_offset) {
                 allocator->in_which_pool = SHMCACHE_STRIPING_ALLOCATOR_POOL_DONE;
@@ -79,10 +84,12 @@ static int shm_value_allocator_do_recycle(struct shmcache_context *context,
         struct shm_striping_allocator *allocator)
 {
     int64_t allocator_offset;
+    // 如果allocator位于pool done中，意味着该allocator对应的内存已经占满了，
+    // 其中的object需要进行释放
     if (allocator->in_which_pool == SHMCACHE_STRIPING_ALLOCATOR_POOL_DONE) {
         allocator_offset = (char *)allocator - context->segments.hashtable.base;
         if (shm_object_pool_remove_by(&context->value_allocator.done,
-                    allocator_offset) >= 0) {
+                                      allocator_offset) >= 0) {
             allocator->in_which_pool = SHMCACHE_STRIPING_ALLOCATOR_POOL_DOING;
             shm_object_pool_push(&context->value_allocator.doing, allocator_offset);
         } else {
@@ -95,6 +102,7 @@ static int shm_value_allocator_do_recycle(struct shmcache_context *context,
     }
     return 0;
 }
+
 
 int shm_value_allocator_recycle(struct shmcache_context *context,
         struct shm_recycle_stats *recycle_stats,
@@ -279,8 +287,11 @@ struct shm_hash_entry *shm_value_allocator_alloc(struct shmcache_context *contex
         if (allocator_offset > 0) {
             allocator = (struct shm_striping_allocator *)(context->segments.
                     hashtable.base + allocator_offset);
-            recycle = (context->config.va_policy.avg_key_ttl > 0 && g_current_time -
-                    allocator->last_alloc_time >= context->config.va_policy.avg_key_ttl);
+
+            // 这里的avg_key_ttl是对所有key的一个默认的生存期么？
+            recycle = (context->config.va_policy.avg_key_ttl > 0
+                       && g_current_time - allocator->last_alloc_time
+                       >= context->config.va_policy.avg_key_ttl);
         } else {
             recycle = false;
         }
@@ -325,16 +336,20 @@ int shm_value_allocator_free(struct shmcache_context *context,
     int64_t used;
 
     allocator = context->value_allocator.allocators + entry->memory.index.striping;
+    
+    // ?? 这里的allocator的释放步骤就是直接将已用内存减去对应大小？
+    // 会在申请内存的时候查找是否有指定大小的空余
+    // 会出现内存内存碎片，导致小块内存的浪费
     used = shm_striping_allocator_free(allocator, entry->memory.size);
     context->memory->usage.used.entry -= entry->memory.size;
     if (used <= 0) {
         if (used < 0) {
             logError("file: "__FILE__", line: %d, "
-                    "striping used memory: %"PRId64" < 0, "
-                    "segment: %d, striping: %d, offset: %"PRId64", size: %d",
-                    __LINE__, used, entry->memory.index.segment,
-                    entry->memory.index.striping, entry->memory.offset,
-                    entry->memory.size);
+                     "striping used memory: %"PRId64" < 0, "
+                     "segment: %d, striping: %d, offset: %"PRId64", size: %d",
+                     __LINE__, used, entry->memory.index.segment,
+                     entry->memory.index.striping, entry->memory.offset,
+                     entry->memory.size);
         }
         *recycled = true;
         shm_striping_allocator_reset(allocator);

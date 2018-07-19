@@ -138,18 +138,22 @@ int shm_lock(struct shmcache_context *context)
 
     __sync_add_and_fetch(&context->memory->stats.lock.total, 1);
     clocks = 0;
+
+    // 使用trylock实现的自旋锁
     while ((result=pthread_mutex_trylock(&context->memory->lock.mutex)) == EBUSY) {
         __sync_add_and_fetch(&context->memory->stats.lock.retry, 1);
         usleep(context->config.lock_policy.trylock_interval_us);
         ++clocks;
+
+        // 死锁之后，终止产生死锁的进程
         if (clocks > context->detect_deadlock_clocks &&
-                (pid=context->memory->lock.pid) > 0)
+            (pid=context->memory->lock.pid) > 0)
         {
             clocks =  0;
             if (kill(pid, 0) != 0) {
                 if (errno == ESRCH || errno == ENOENT) {
                     __sync_add_and_fetch(&context->memory->stats.
-                            lock.detect_deadlock, 1);
+                                         lock.detect_deadlock, 1);
                     context->memory->stats.lock.
                         last_detect_deadlock_time = get_current_time();
                     shm_detect_deadlock(context, pid);

@@ -121,6 +121,7 @@ int shm_ht_set(struct shmcache_context *context,
         new_entry->ht_next = 0;
     }
 
+    // 以下代码主要目的是将传入的value值内容拷贝至新申请的entry之中
     new_offset = shm_get_hentry_offset(new_entry);
     memcpy(new_entry->key, key->data, key->length);
     new_entry->key_len = key->length;
@@ -131,6 +132,7 @@ int shm_ht_set(struct shmcache_context *context,
     new_entry->value.options = value->options;
     new_entry->expires = value->expires;
 
+    // 原始key经过计算后遇见了重复的hash值
     if (previous != NULL) {  //add to tail
         previous->ht_next = new_offset;
     } else {
@@ -139,6 +141,8 @@ int shm_ht_set(struct shmcache_context *context,
     context->memory->hashtable.count++;
     context->memory->usage.used.value += value->length;
     context->memory->usage.used.key += new_entry->key_len;
+
+    // 将这个新的offset加入到list中去
     shm_list_add_tail(context, new_offset);
 
     return 0;

@@ -48,18 +48,23 @@ static void get_value_segment_count_size(struct shmcache_config *config,
 }
 
 static void get_value_striping_count_size(
-        struct shmcache_config *config,
-        const int64_t value_max_memory,
-        struct shm_value_size_info *segment,
-        struct shm_value_size_info *striping)
+    struct shmcache_config *config,
+    const int64_t value_max_memory,
+    struct shm_value_size_info *segment,
+    struct shm_value_size_info *striping)
 {
     int page_size;
     int mb_count;
 
+    // segment size 和 count 是在这里计算出来的
     get_value_segment_count_size(config, value_max_memory, segment);
 
     page_size = getpagesize();
+
+    // 这里的mb_count有什么含义，为什么要做此处理
+    // ?? 除以128m 这里为什么要除以128m 呢
     mb_count = segment->size / (128 * 1024 * 1024);
+    
     if (mb_count == 0) {
         mb_count = 1;
     } else if (mb_count > 8) {
@@ -72,14 +77,22 @@ static void get_value_striping_count_size(
         }
     }
 
+    // mb_count 用于计算 striping size
     striping->size = mb_count * 1024 * 1024;
+
+    // 单个value的最大大小，这样一个striping就至少能够装下两个最大value了
     if (striping->size < config->max_value_size * 2) {
         striping->size = config->max_value_size * 2;
     }
+
+    // 进行字节对齐
     striping->size = SHMCACE_MEM_ALIGN(striping->size, page_size);
+    // strping size 不能超过 segment size
     if (striping->size > segment->size) {
         striping->size = segment->size;
     }
+
+    // 需要注意这个参数
     striping->count.max = segment->count.max * (segment->size / striping->size);
     striping->count.current = 0;
 }
@@ -89,11 +102,16 @@ static int64_t shmcache_get_ht_segment_size(struct shmcache_context *context,
         struct shm_value_size_info *striping,
         int *ht_capacity, int64_t *ht_offsets)
 {
-    int64_t total_size;
+    int64_t total_size; // 用于累加计算ht_segment的总大小
     int64_t va_pool_queue_memory_size;
 
+    // 根据配置计算出segment和striping的大小信息
+    // 需要注意的是，这个函数在本段逻辑中被调用了两次
+    // 这两次调用的目的都是什么？
+    // 这两次调用的区别在于传入的第二参数不同，作为函数执行结果从segment和striping两个参数返回
+    // 在后续的计算中使用了 striping.count.max 这个参数
     get_value_striping_count_size(&context->config, context->config.max_memory,
-            segment, striping);
+                                  segment, striping);
 
     *ht_capacity = shm_ht_get_capacity(context->config.max_key_count + 1);
     total_size = sizeof(struct shm_memory_info);
@@ -111,7 +129,7 @@ static int64_t shmcache_get_ht_segment_size(struct shmcache_context *context,
             context->config.max_key_count + 1);
 
     va_pool_queue_memory_size = shm_object_pool_get_queue_memory_size(
-            striping->count.max + 1);
+        striping->count.max + 1);
 
     ht_offsets[OFFSETS_INDEX_VA_POOL_QUEUE_DOING] = total_size;
     total_size += va_pool_queue_memory_size;
@@ -121,11 +139,12 @@ static int64_t shmcache_get_ht_segment_size(struct shmcache_context *context,
 
     ht_offsets[OFFSETS_INDEX_VA_POOL_OBJECT] = total_size;
     total_size += shm_object_pool_get_object_memory_size(
-            sizeof(struct shm_striping_allocator), striping->count.max);
+        sizeof(struct shm_striping_allocator), striping->count.max);
 
+    // 第二次计算
     get_value_striping_count_size(&context->config,
-            context->config.max_memory - total_size,
-            segment, striping);
+                                  context->config.max_memory - total_size,
+                                  segment, striping);
     return total_size;
 }
 
@@ -374,16 +393,22 @@ int shmcache_init(struct shmcache_context *context,
     int64_t ht_offsets[OFFSETS_COUNT];
 
     memset(context, 0, sizeof(*context));
+    
     context->config = *config;
     context->pid = getpid();
     context->lock_fd = -1;
     context->create_segment = create_segment;
 
-    ht_segment_size = shmcache_get_ht_segment_size(context,
-            &segment, &striping, &ht_capacity, ht_offsets);
+    // 计算各个内存区的大小
+    ht_segment_size = shmcache_get_ht_segment_size(
+        context, &segment, &striping, &ht_capacity, ht_offsets);
 
+    
     ht_segemnt_exists = shm_exists(context->config.type,
-            context->config.filename, SHM_HASH_TABLE_PROJ_ID);
+                                   context->config.filename,
+                                   SHM_HASH_TABLE_PROJ_ID);
+
+    
     if ((result=shmopt_init_segment(context, &context->segments.hashtable,
                     SHM_HASH_TABLE_PROJ_ID, ht_segment_size)) != 0)
     {

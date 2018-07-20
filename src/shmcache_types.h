@@ -309,12 +309,15 @@ struct shmcache_context {
     int lock_fd;    //for file lock
     int detect_deadlock_clocks;
     struct shmcache_config config;
+    
+    // 这部分是共享内存映射的，这里的memory实际上是segments.hashtable.base
     struct shm_memory_info *memory;
+    
     struct {
-        struct shmcache_segment_info hashtable;
+        struct shmcache_segment_info hashtable; // 这部分是共享内存映射的
         struct {
             int count;
-            struct shmcache_segment_info *items;
+            struct shmcache_segment_info *items; // 注意，这部分内存是malloc出来的
         } values;
     } segments;
 

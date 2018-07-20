@@ -156,11 +156,15 @@ int shm_ht_get(struct shmcache_context *context,
     int64_t entry_offset;
     struct shm_hash_entry *entry;
 
+    // 计算出index
     index = HT_GET_BUCKET_INDEX(context, key);
+    // 找出对应的offset
     entry_offset = context->memory->hashtable.buckets[index];
+    // 通过offset找到对应的hash entry
     while (entry_offset > 0) {
         entry = shm_get_hentry_ptr(context, entry_offset);
         if (HT_KEY_EQUALS(entry, key)) {
+            // 这里的data是将内存地址拿出来，如果读写同时发生，会不会有问题呢？
             value->data = shm_get_value_ptr(context, entry);
             value->length = entry->value.length;
             value->options = entry->value.options;

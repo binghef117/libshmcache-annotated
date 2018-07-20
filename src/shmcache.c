@@ -172,6 +172,7 @@ static int shmcache_do_init(struct shmcache_context *context,
 	int result;
     int64_t *queue_base;
 
+    // 在这里进行了互斥锁的初始化
     if ((result=shm_lock_init(context)) != 0) {
         return result;
     }
@@ -203,6 +204,7 @@ static int shmcache_do_lock_init(struct shmcache_context *context,
 {
     int result;
 
+    // 使用了文件读写锁
     if ((result=shm_lock_file(context)) != 0) {
         return result;
     }
@@ -218,6 +220,8 @@ static int shmcache_do_lock_init(struct shmcache_context *context,
 
         shm_ht_init(context, ht_capacity);
         shm_list_init(context);
+
+        
         if ((result=shmcache_do_init(context, ht_offsets)) != 0) {
             break;
         }
@@ -352,8 +356,8 @@ static int shmcache_check(struct shmcache_context *context,
 
     if (context->memory->status != SHMCACHE_STATUS_NORMAL) {
         logError("file: "__FILE__", line: %d, "
-                "share memory is invalid because status: 0x%08x != 0x%08x",
-                __LINE__, context->memory->status, SHMCACHE_STATUS_NORMAL);
+                 "share memory is invalid because status: 0x%08x != 0x%08x",
+                 __LINE__, context->memory->status, SHMCACHE_STATUS_NORMAL);
         return EINVAL;
     }
 
@@ -410,12 +414,13 @@ int shmcache_init(struct shmcache_context *context,
 
     
     if ((result=shmopt_init_segment(context, &context->segments.hashtable,
-                    SHM_HASH_TABLE_PROJ_ID, ht_segment_size)) != 0)
+                                    SHM_HASH_TABLE_PROJ_ID, ht_segment_size)) != 0)
     {
         return result;
     }
 
     bytes = sizeof(struct shmcache_segment_info) * segment.count.max;
+    // 注意这里的内存是malloc出来的，也就是说这部分内存是本进程内独有的
     context->segments.values.items = (struct shmcache_segment_info *)malloc(bytes);
     if (context->segments.values.items == NULL) {
         logError("file: "__FILE__", line: %d, "
@@ -426,8 +431,11 @@ int shmcache_init(struct shmcache_context *context,
 
     context->memory = (struct shm_memory_info *)context->segments.hashtable.base;
     shm_list_set(context, context->segments.hashtable.base,
-            &context->memory->hashtable.head);
+                 &context->memory->hashtable.head);
+    
     shmcache_set_obj_allocators(context, ht_offsets);
+
+    // 对已有segment进行检查
     if (ht_segemnt_exists && check_segment &&
             (result=shmcache_check(context, &segment, &striping)) != 0)
     {
@@ -436,8 +444,10 @@ int shmcache_init(struct shmcache_context *context,
 
     if (create_segment) {
         if (context->memory->status == SHMCACHE_STATUS_INIT) {
+
+            // 进行加锁初始化（文件锁）
             result = shmcache_do_lock_init(context, ht_capacity, &segment,
-                    &striping, ht_offsets);
+                                           &striping, ht_offsets);
             if (!(result == 0 || result == -EEXIST)) {
                 return result;
             }
@@ -446,10 +456,11 @@ int shmcache_init(struct shmcache_context *context,
         if (result == 0 && context->memory->vm_info.segment.count.current <
                 context->memory->vm_info.segment.count.max)
         {
+            // 使用了pthread_mutex进行同步加锁，互斥量是否需要初始化
             shm_lock(context);
             while (context->segments.hashtable.size +
-                context->memory->vm_info.segment.size *
-                context->memory->vm_info.segment.count.current < config->min_memory)
+                   context->memory->vm_info.segment.size *
+                   context->memory->vm_info.segment.count.current < config->min_memory)
             {
                 if ((result=shmopt_create_value_segment(context)) != 0) {
                     break;
@@ -460,6 +471,7 @@ int shmcache_init(struct shmcache_context *context,
                     break;
                 }
             }
+            
             shm_unlock(context);
         }
     }
